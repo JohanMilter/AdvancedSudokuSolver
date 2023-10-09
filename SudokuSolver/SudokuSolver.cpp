@@ -7,24 +7,45 @@ using namespace std;
 class Sudoku
 {
 public:
-	//Set the time delay for each PressKey 0 is the fastest
-	int TimeDelay = 100;
 	//Simple method to just check if everything was typed right
 	void CalculateSudoku()
 	{
-		GetValues();
-		Sleep(10);
-		if (grid.size() >= 9)
-			Solve();
-		else
-			cout << "Try again. You fucked up!";
+		char response = 'y';
+
+		do
+		{
+			string time;
+
+			if (response == 'y')
+			{
+				cout << "How many ms/number? ";
+				cin.ignore();
+				getline(cin, time);
+
+				TimeDelay = stoi(time);
+
+				//
+				GetValues();
+				Sleep(10);
+				if (grid.size() >= 9)
+					Solve();
+				else
+					cout << "Try again. You fucked up!";
+				//
+			}
+			cout << endl << "Another sudoku (y/n)? ";
+			cin >> response;
+			grid.clear();
+			system("cls");
+		} while (response == 'y');
 	}
 private:
+	//Set the time delay for each PressKey 0 is the fastest
+	int TimeDelay = 100;
 	//The main grid that holds the numbers just like matrix
 	vector<vector<int>> grid;
 	void GetValues()
 	{
-		//Here we want to get the values into the grid. Simple method, not gonna explain that
 		string row;
 		do
 		{
@@ -169,27 +190,19 @@ private:
 		Print(grid);
 	}
 };
+class GetSudoku
+{
+public:
+	vector<vector<int>> GetSudokuValues()
+	{
+		return vector<vector<int>>();
+	}
+};
 
 int main()
 {
-	char response = 'y';
-
-	do
-	{
-		Sudoku sudoku;
-		string time;
-
-		if (response == 'y')
-		{
-			cout << "How many ms/number? ";
-			cin.ignore();
-			getline(cin, time);
-
-			sudoku.TimeDelay = stoi(time);
-			sudoku.CalculateSudoku();
-		}
-		cout << endl << "Another sudoku (y/n)? ";
-		cin >> response;
-		system("cls");
-	} while (response == 'y');
+	/*GetSudoku getSudoku;
+	getSudoku.GetSudokuValues();*/
+	Sudoku sudoku;
+	sudoku.CalculateSudoku();
 }
