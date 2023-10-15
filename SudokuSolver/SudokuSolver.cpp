@@ -4,69 +4,93 @@
 #include <windows.h>
 #include <thread>
 #include <string>
+#include <cstdlib>
 
 class SudokuGameAutoSolver
 {
 public:
+	/// <summary>
+	/// Execute the sudoku destroyer
+	/// </summary>
 	void ExecuteOrder66()
 	{
-		int tempTimeDelay = TimeDelay;
-		TimeDelay = TimeDelay == 0 ? 1 : TimeDelay;
+		//Handling values, so that the user doesnt choose something that is not possible
+		readSudokuSpeed = readSudokuSpeed > 9 ? 9 : readSudokuSpeed;
+		int tempTimeDelay = inputDelay;
+		inputDelay = inputDelay == 0 ? 1 : inputDelay;
+
+		//Making sure the userr can stop at any time
 		std::thread keyPressThread([&]
 		{
 			checkForKeyPress();
 		});
+		std::cout << "Go to https://sudoku.com/sudoku-solver" << std::endl;
+		PromptForKeyAndMessage("Hold CTRL and left click on the link above", VK_LBUTTON, 2000);
 		GetGameCopyPos();
 		Calibrate();
-		std::cout << "Left click on 'Classic'" << std::endl;
+		PromptForKeyAndMessage("Left click on 'Classic'", VK_LBUTTON, 1000);
+		PromptForKeyAndMessage("Select difficulty", VK_LBUTTON, 0, &difficulty);
+		std::cout << "Starting..." << std::endl;
+		inputDelay = tempTimeDelay;
 		while (true)
-		{
-			if (GetKeyState(VK_LBUTTON) & 0x8000)
-				break;
-			Sleep(10);
-		}
-		Sleep(1000);
-		std::cout << "Select difficulty" << std::endl;
-		while (true)
-		{
-			if (GetKeyState(VK_LBUTTON) & 0x8000)
-			{
-				GetCursorPos(&difficulty);
-				break;
-			}
-			Sleep(10);
-		}
-		Sleep(1000);
-		std::cout << "starting" << std::endl;
-		TimeDelay = tempTimeDelay;
-		while (!stopFlag)
 		{
 			SetCursorPos(difficulty.x, difficulty.y);
 			PressMouse(VK_LBUTTON);
 			Sleep(1000);
 			SolveSudoku();
-			Sleep(2000);
+			Sleep(showScore);
 		}
-		keyPressThread.join();
 	}
-	int TimeDelay = 10;
+	/// <summary>
+	/// The delay in which every key is pressed. Unit: Milliseconds. Standard: 1
+	/// </summary>
+	int inputDelay = 1;
+	/// <summary>
+	/// Speed from 0-9.
+	/// 0 has the best precision but is the slowest.
+	/// 9 has bad precision but is the fastest. 
+	/// Standard: 9. 
+	/// </summary>
+	int readSudokuSpeed = 9;
+	/// <summary>
+	/// How much time should the rating be shown (Where you can see your score). Unit: Milliseconds. Standard: 2000
+	/// </summary>
+	int showScore = 2000;
 private:
-
 #pragma region Stop when the user want to
-	bool stopFlag = false;
+	/// <summary>
+	/// Stop the application the moment we hit 's'
+	/// </summary>
 	void checkForKeyPress()
 	{
-		while (!stopFlag)
+		while (true)
 		{
 			if (GetKeyState('S') & 0x8000)
 			{
-				stopFlag = true;
 				std::cout << "Stopping the solver..." << std::endl;
+				exit(0);
 			}
 			Sleep(10);
 		}
 	}
 #pragma endregion
+	/// <summary>
+	/// Very basic way of telling the user what to do, and wait for them to do it
+	/// </summary>
+	void PromptForKeyAndMessage(std::string message, WORD virtKey, int wait, POINT* point = nullptr)
+	{
+		std::cout << message << std::endl;
+		while (true)
+		{
+			if (GetKeyState(virtKey) & 0x8000)
+			{
+				GetCursorPos(point);
+				break;
+			}
+			Sleep(10);
+		}
+		Sleep(wait);
+	}
 #pragma region Calibrating
 	std::vector<std::vector<std::vector<std::tuple<std::string, int>>>> MatchCodes;
 	void Calibrate()
@@ -126,7 +150,7 @@ private:
 	POINT difficulty{};
 	int LevenshteinDistance(const char* s1, const char* s2)
 	{
-#define MIN(x,y) ((x) < (y) ? (x) : (y)) //calculate minimum between two values
+#define MIN(x,y) (x < y ? x : y) //calculate minimum between two values
 		int i, j, l1, l2, t, track;
 		int dist[50][50]{};
 		//stores the lenght of strings s1 and s2
@@ -150,6 +174,7 @@ private:
 	}
 	void SolveSudoku()
 	{
+		int i = 1;
 		auto numberCode = GetGameCodes();
 		std::vector<std::vector<int>> SudokuValues;
 		for (int y = 0; y < MatchCodes.size(); y++)
@@ -157,10 +182,15 @@ private:
 			std::vector<int> row;
 			for (int x = 0; x < MatchCodes[y].size(); x++)
 			{
+				if (numberCode[y][x] != "")
+				{
+					std::cout << "Number: " << i << std::endl;
+					i++;
+				}
+
 				float oldNum = 100;
 				int num = 0;
 				for (std::tuple<std::string, int> item : MatchCodes[y][x])
-				{
 					if (numberCode[y][x] != "")
 					{
 						float testMatch = (double)LevenshteinDistance(std::get<0>(item).c_str(), numberCode[y][x].c_str()) / std::get<0>(item).size();
@@ -168,12 +198,13 @@ private:
 						std::cout << std::get<1>(item) << ": " << std::get<0>(item) << " and " << numberCode[y][x] << " = " << testMatch << std::endl;
 						if (testMatch < oldNum)
 						{
-							num = std::get<1>(item);
+							num = std::get<1>(item); 
 							oldNum = testMatch;
+
+							if (testMatch == 0)
+								break;
 						}
 					}
-				}
-
 				row.push_back(num);
 			}
 			SudokuValues.push_back(row);
@@ -233,10 +264,6 @@ private:
 	}
 	void Print(std::vector<std::vector<int>> matrix)
 	{
-		std::vector<int> list;
-		//Here we add all of the rows into one big list
-		for (std::vector<int> row : matrix)
-			list.insert(list.end(), row.begin(), row.end());
 		std::cout << std::endl;
 		for (byte i_1 = 0; i_1 < matrix.size(); i_1++)
 		{
@@ -250,22 +277,40 @@ private:
 			std::cout << std::endl;
 		}
 
-		int counterGoBack = 1;
-		//Here we iterate through each of the int in the list
-		for (int num : list)
+
+		int X;
+		int Y = 0;
+		for (byte y = 0; y < 5; y++)
 		{
-			//Here we press the individual key
-			PressKey(0x30 + num);
-			//Here we go to the right, so that we can type another number
-			PressKey(VK_RIGHT);
-			if (counterGoBack % 9 == 0)
+			X = 0;
+			for (byte x = 0; x < 9; x++)
 			{
-				PressKey(VK_DOWN);
-				for (int i = 0; i < 18; i++)
-					PressKey(VK_LEFT);
+				PressKey(0x30 + matrix[Y][X]);
+				PressKey(VK_RIGHT);
+				X++;
 			}
-			counterGoBack++;
+			Y++;
+			if (y < 4)
+			{
+				X = 0;
+				std::reverse(matrix[Y].begin(), matrix[Y].end());
+				PressKey(VK_DOWN);
+				for (byte x = 0; x < 9; x++)
+				{
+					PressKey(0x30 + matrix[Y][X]);
+					PressKey(VK_LEFT);
+					X++;
+				}
+				PressKey(VK_DOWN);
+				Y++;
+			}
 		}
+		for (byte y = 0; y < 9; y++)
+		{
+			PressKey(VK_LEFT);
+			PressKey(VK_UP);
+		}
+		
 	}
 	void Solve()
 	{
@@ -325,7 +370,7 @@ private:
 		SendInput(1, &ip, sizeof(ip));
 
 		//Sleep for the desired time, can be changed by the user.
-		Sleep(TimeDelay);
+		Sleep(inputDelay);
 	}
 #pragma endregion
 #pragma region Converters
@@ -374,31 +419,13 @@ private:
 	void GetGameCopyPos()
 	{
 		//Copy image
-		std::cout << "Right click on game" << std::endl;
-		while (true)
-		{
-			if (GetKeyState(VK_RBUTTON) < 0)
-			{
-				GetCursorPos(&rightClick);
-				break;
-			}
-			Sleep(10);
-		}
-		std::cout << "Left click on copy" << std::endl;
-		while (true)
-		{
-			if (GetKeyState(VK_LBUTTON) < 0)
-			{
-				GetCursorPos(&leftClick);
-				break;
-			}
-			Sleep(10);
-		}
+		PromptForKeyAndMessage("Right click on game", VK_RBUTTON, 0, &rightClick);
+		PromptForKeyAndMessage("Left click on copy", VK_LBUTTON, 0, &leftClick);
 		EmptyClipboard();
 	}
 
 	//Get Game
-	std::vector<std::vector<std::string>> GetGameCodes(int compressValue = 6)
+	std::vector<std::vector<std::string>> GetGameCodes()
 	{
 		EmptyClipboard();
 		//Copy Game
@@ -420,11 +447,11 @@ private:
 		CloseClipboard();
 		std::vector<std::vector<bool>> game;
 		for (int y = 0; y < bitmap.bmHeight; y++)
-			if (y % compressValue == 0)
+			if (y % readSudokuSpeed == 0)
 			{
 				std::vector<bool> tempGame;
 				for (int x = 0; x < bitmap.bmWidth; x++)
-					if (x % compressValue == 0)
+					if (x % readSudokuSpeed == 0)
 						tempGame.push_back(IsGameColor(GetPixel(hdc, x, y)) > 0);
 				game.push_back(tempGame);
 			}
@@ -489,6 +516,8 @@ int main()
 {
 	//To stop the code press 's'
 	SudokuGameAutoSolver gameSolver;
-	gameSolver.TimeDelay = 1;
+	gameSolver.readSudokuSpeed = 9;
+	gameSolver.inputDelay = 0;
+	gameSolver.showScore = 1000;
 	gameSolver.ExecuteOrder66();
 }
