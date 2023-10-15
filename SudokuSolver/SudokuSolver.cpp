@@ -261,7 +261,7 @@ private:
 			if (counterGoBack % 9 == 0)
 			{
 				PressKey(VK_DOWN);
-				for (int i = 0; i < 11; i++)
+				for (int i = 0; i < 18; i++)
 					PressKey(VK_LEFT);
 			}
 			counterGoBack++;
@@ -487,6 +487,7 @@ private:
 
 int main()
 {
+	//To stop the code press 's'
 	SudokuGameAutoSolver gameSolver;
 	gameSolver.TimeDelay = 1;
 	gameSolver.ExecuteOrder66();
