@@ -74,23 +74,6 @@ private:
 		}
 	}
 #pragma endregion
-	/// <summary>
-	/// Very basic way of telling the user what to do, and wait for them to do it
-	/// </summary>
-	void PromptForKeyAndMessage(std::string message, WORD virtKey, int wait, POINT* point = nullptr)
-	{
-		std::cout << message << std::endl;
-		while (true)
-		{
-			if (GetKeyState(virtKey) & 0x8000)
-			{
-				GetCursorPos(point);
-				break;
-			}
-			Sleep(10);
-		}
-		Sleep(wait);
-	}
 #pragma region Calibrating
 	std::vector<std::vector<std::vector<std::tuple<std::string, int>>>> MatchCodes;
 	void Calibrate()
@@ -198,7 +181,7 @@ private:
 						std::cout << std::get<1>(item) << ": " << std::get<0>(item) << " and " << numberCode[y][x] << " = " << testMatch << std::endl;
 						if (testMatch < oldNum)
 						{
-							num = std::get<1>(item); 
+							num = std::get<1>(item);
 							oldNum = testMatch;
 
 							if (testMatch == 0)
@@ -209,6 +192,7 @@ private:
 			}
 			SudokuValues.push_back(row);
 		}
+		std::cout << std::endl;
 		for (byte i_1 = 0; i_1 < SudokuValues.size(); i_1++)
 		{
 			if (i_1 % 3 == 0 && i_1 != 0)
@@ -276,7 +260,7 @@ private:
 					std::cout << " " << matrix[i_1][i_2];
 			std::cout << std::endl;
 		}
-
+		std::cout << std::endl;
 
 		int X;
 		int Y = 0;
@@ -310,7 +294,7 @@ private:
 			PressKey(VK_LEFT);
 			PressKey(VK_UP);
 		}
-		
+
 	}
 	void Solve()
 	{
@@ -334,6 +318,23 @@ private:
 #pragma endregion
 #pragma endregion
 #pragma region Inputs
+	/// <summary>
+	/// Very basic way of telling the user what to do, and wait for them to do it
+	/// </summary>
+	void PromptForKeyAndMessage(std::string message, WORD virtKey, int wait, POINT* point = nullptr)
+	{
+		std::cout << message << std::endl;
+		while (true)
+		{
+			if (GetKeyState(virtKey) & 0x8000)
+			{
+				GetCursorPos(point);
+				break;
+			}
+			Sleep(10);
+		}
+		Sleep(wait);
+	}
 	void PressMouse(int virtKey, int duration = 0)
 	{
 		INPUT input{};
@@ -411,7 +412,6 @@ private:
 	}
 #pragma endregion
 #pragma region GetGame
-private:
 	POINT rightClick{};
 	POINT leftClick{};
 
@@ -518,6 +518,6 @@ int main()
 	SudokuGameAutoSolver gameSolver;
 	gameSolver.readSudokuSpeed = 9;
 	gameSolver.inputDelay = 0;
-	gameSolver.showScore = 1000;
+	gameSolver.showScore = 2000;
 	gameSolver.ExecuteOrder66();
 }
