@@ -1,14 +1,15 @@
 #include <iostream>
-#include <vector>
-#include <tuple>
 #include <windows.h>
 #include <thread>
-#include <string>
 #include <cstdlib>
+#include <string>
+#include <algorithm>
+#include <unordered_set>
+#include <chrono>
 
-class SudokuGameAutoSolver
+class SudokuAutoGameSolver
 {
-public:
+public: //Methods
 	/// <summary>
 	/// Execute the sudoku destroyer
 	/// </summary>
@@ -36,11 +37,20 @@ public:
 		{
 			SetCursorPos(difficulty.x, difficulty.y);
 			PressMouse(VK_LBUTTON);
-			Sleep(1000);
+			Sleep(newGameWait);
 			SolveSudoku();
 			Sleep(showScore);
 		}
 	}
+public: //Objects
+	static enum PrintingMethods
+	{
+		NoPrinting,
+		Print,
+		OnlyGoToNULL,
+		Humanize,
+		SuperHumanize,
+	};
 	/// <summary>
 	/// The delay in which every key is pressed. Unit: Milliseconds. Standard: 1
 	/// </summary>
@@ -53,10 +63,33 @@ public:
 	/// </summary>
 	int readSudokuSpeed = 9;
 	/// <summary>
+	/// The delay in which the calibration keys are executed. Unit: Milliseconds. Standard: 1
+	/// </summary>
+	int calibrationSpeed = 1;
+	/// <summary>
 	/// How much time should the rating be shown (Where you can see your score). Unit: Milliseconds. Standard: 2000
 	/// </summary>
 	int showScore = 2000;
-private:
+	/// <summary>
+	/// When printing the sudoku to the website, you can toggle between it 
+	/// snapping to a place that is null or simply go slowly to a place that 
+	/// is null. Works only for PrintingMethods higher than 'Print' and at a 
+	/// slow inputDelay
+	/// </summary>
+	bool snapToNull = false;
+	/// <summary>
+	/// When the sudoku game is being copied, theres a time between the 2 clicks. This changes that time. Unit: Milliseconds. Default: 100
+	/// </summary>
+	int clickCopyTime = 50;
+	/// <summary>
+	/// How many milliseconds should the solver wait, to copy after "new game is clicked". Default: 1000
+	/// </summary>
+	int newGameWait = 1000;
+	/// <summary>
+	/// Print the solved sudoku to the website. 0 = No Printing. 1 = Print to the website. 2 = Print randomly to the website. Default: NoPrinting
+	/// </summary>
+	PrintingMethods printWebsite = NoPrinting;
+private: //Methods
 #pragma region Stop when the user want to
 	/// <summary>
 	/// Stop the application the moment we hit 's'
@@ -75,9 +108,10 @@ private:
 	}
 #pragma endregion
 #pragma region Calibrating
-	std::vector<std::vector<std::vector<std::tuple<std::string, int>>>> MatchCodes;
 	void Calibrate()
 	{
+		int tempInputDelay = inputDelay;
+		inputDelay = calibrationSpeed;
 		//Fill MatchCodes with values
 		for (byte i = 0; i < 9; i++)
 		{
@@ -127,10 +161,10 @@ private:
 				for (int x = 0; x < numberCode[y].size(); x++)
 					MatchCodes[y][x].push_back(std::make_tuple(numberCode[y][x], i));
 		}
+		inputDelay = tempInputDelay;
 	}
 #pragma endregion
 #pragma region Solving
-	POINT difficulty{};
 	int LevenshteinDistance(const char* s1, const char* s2)
 	{
 #define MIN(x,y) (x < y ? x : y) //calculate minimum between two values
@@ -204,51 +238,83 @@ private:
 					std::cout << " " << SudokuValues[i_1][i_2];
 			std::cout << std::endl;
 		}
-		CalculateSudokuWithValues(SudokuValues);
+		Solve(SudokuValues);
+		std::cout << std::endl;
+		PrintSudoku(grid);
+		std::cout << std::endl;
 	}
 #pragma region Actual Sudoku Solver
-	void CalculateSudokuWithValues(std::vector<std::vector<int>> Grid)
+	void Solve(std::vector<std::vector<int>> Grid)
 	{
-		grid = Grid;
-		if (grid.size() >= 9)
-			Solve();
+		grid = originalGrid = Grid;
+		boxes.clear();
+		rows.clear();
+		cols.clear();
+		solutionFound = false;
+		// Insert values into all unordered_set's
+		for (byte i = 0; i < 9; i++)
+		{
+			boxes.push_back(std::unordered_set<int>());
+			rows.push_back(std::unordered_set<int>());
+			cols.push_back(std::unordered_set<int>());
+		}
+		for (int y = 0; y < 9; y++)
+		{
+			for (int x = 0; x < 9; x++)
+			{
+				if (grid[y][x] != 0)
+				{
+					rows[y].insert(grid[y][x]);
+					cols[x].insert(grid[y][x]);
+					boxes[y / 3 * 3 + x / 3].insert(grid[y][x]);
+				}
+			}
+		}
+
+		// Start solving
+		SolveRecursive(0, 0);
 	}
-	std::vector<std::vector<int>> grid;
 	bool Possible(int x, int y, int n)
 	{
-		//This is the brain of the program!
-
-		//This for loop iterates from 0 to 9, these values can be changed to fit the sudoku play
-		for (int i = 0; i < 9; i++)
-			//Here we check if n is equal to any of the rows (manipulated by 'i') at the column of x
-			if (grid[i][x] == n && i != y)
-				//Return false if n is in the row
-				return false;
-
-		//This for loop iterates from 0 to 9, these values can be changed to fit the sudoku play
-		for (int i = 0; i < 9; i++)
-			//Here we check if n is equal to any of the columns (manipulated by 'i') at the row of y
-			if (grid[y][i] == n && i != x)
-				//Return false if n is in the column
-				return false;
-
-		//This will switch through the columns and rows. 
-		//So that when x = 0 or 1 or 2 we dont run. When x = 3 we do run. 
-		//The same goes for y
-		int x0 = (x / 3) * 3;
-		int y0 = (y / 3) * 3;
-		//We run 3 times for each 3cell in row
-		for (int X = x0; X < (x0 + 3); X++)
-			//We run 3 times for each 3cell in column
-			for (int Y = y0; Y < (y0 + 3); Y++)
-				//We check if any of the values is equal to n and return false if it is
-				if (grid[Y][X] == n)
-					return false;
-		return true;
+		return !rows[y].count(n) && !cols[x].count(n) && !boxes[y / 3 * 3 + x / 3].count(n);
 	}
-	void Print(std::vector<std::vector<int>> matrix)
+	void SolveRecursive(int x, int y)
 	{
-		std::cout << std::endl;
+		if (y == 9)
+		{
+			solutionFound = true;
+			return;
+		}
+
+		int nextX = (x + 1) % 9;
+		int nextY = (nextX == 0) ? y + 1 : y;
+
+		if (grid[y][x] != 0)
+		{
+			SolveRecursive(nextX, nextY);
+			return;
+		}
+		for (int n = 1; n <= 9; n++)
+		{
+			if (Possible(x, y, n))
+			{
+				grid[y][x] = n;
+				rows[y].insert(n);
+				cols[x].insert(n);
+				boxes[y / 3 * 3 + x / 3].insert(n);
+
+				SolveRecursive(nextX, nextY);
+				if (solutionFound)
+					return;
+				grid[y][x] = 0;
+				rows[y].erase(n);
+				cols[x].erase(n);
+				boxes[y / 3 * 3 + x / 3].erase(n);
+			}
+		}
+	}
+	void PrintSudoku(std::vector<std::vector<int>> matrix)
+	{
 		for (byte i_1 = 0; i_1 < matrix.size(); i_1++)
 		{
 			if (i_1 % 3 == 0 && i_1 != 0)
@@ -260,60 +326,100 @@ private:
 					std::cout << " " << matrix[i_1][i_2];
 			std::cout << std::endl;
 		}
-		std::cout << std::endl;
 
-		int X;
+		int tempInputDelay = inputDelay;
+		int X = 0;
 		int Y = 0;
-		for (byte y = 0; y < 5; y++)
+		std::vector<std::tuple<POINT, int>> values;
+		switch (printWebsite)
 		{
-			X = 0;
-			for (byte x = 0; x < 9; x++)
-			{
-				PressKey(0x30 + matrix[Y][X]);
-				PressKey(VK_RIGHT);
-				X++;
-			}
-			Y++;
-			if (y < 4)
-			{
-				X = 0;
-				std::reverse(matrix[Y].begin(), matrix[Y].end());
-				PressKey(VK_DOWN);
-				for (byte x = 0; x < 9; x++)
+			case Print:
+				for (byte y = 0; y < 5; y++)
 				{
-					PressKey(0x30 + matrix[Y][X]);
-					PressKey(VK_LEFT);
-					X++;
-				}
-				PressKey(VK_DOWN);
-				Y++;
-			}
-		}
-		for (byte y = 0; y < 9; y++)
-		{
-			PressKey(VK_LEFT);
-			PressKey(VK_UP);
-		}
-
-	}
-	void Solve()
-	{
-		//This will just check if the cell is 0, if it is, then it will try and check which number it can be.
-		for (int y = 0; y < 9; y++)
-			for (int x = 0; x < 9; x++)
-				if (grid[y][x] == 0)
-				{
-					for (int n = 1; n < 10; n++)
-						if (Possible(x, y, n))
+					X = 0;
+					for (byte x = 0; x < 9; x++)
+					{
+						PressKey(0x30 + matrix[Y][X]);
+						PressKey(VK_RIGHT);
+						X++;
+					}
+					Y++;
+					if (y < 4)
+					{
+						X = 0;
+						std::reverse(matrix[Y].begin(), matrix[Y].end());
+						PressKey(VK_DOWN);
+						for (byte x = 0; x < 9; x++)
 						{
-							grid[y][x] = n;
-							Solve();
-							grid[y][x] = 0;
+							PressKey(0x30 + matrix[Y][X]);
+							PressKey(VK_LEFT);
+							X++;
 						}
-					return;
+						PressKey(VK_DOWN);
+						Y++;
+					}
 				}
+				if (snapToNull)
+					inputDelay = 0;
+				for (byte y = 0; y < 9; y++)
+				{
+					PressKey(VK_LEFT);
+					PressKey(VK_UP);
+				}
+				if (snapToNull)
+					inputDelay = tempInputDelay;
+				break;
+			case OnlyGoToNULL:
+				for (byte y = 0; y < originalGrid.size(); y++)
+					for (byte x = 0; x < originalGrid[y].size(); x++)
+						if (originalGrid[y][x] == 0)
+						{
+							if (snapToNull)
+								inputDelay = 0;
+							int valueX = x - X;
+							int valueY = y - Y;
+							for (byte i = 0; i < std::abs(valueX); i++)
+								PressKey((valueX < 0 ? true : false) ? VK_LEFT : VK_RIGHT);
+							for (byte i = 0; i < std::abs(valueY); i++)
+								PressKey((valueY < 0 ? true : false) ? VK_UP : VK_DOWN);
+							if (snapToNull)
+								inputDelay = tempInputDelay;
 
-		Print(grid);
+							PressKey(0x30 + matrix[y][x]);
+
+							X = x;
+							Y = y;
+						}
+				break;
+			case Humanize:
+				for (byte y = 0; y < originalGrid.size(); y++)
+					for (byte x = 0; x < originalGrid[y].size(); x++)
+						if (originalGrid[y][x] == 0)
+							values.emplace_back(POINT{ x,y }, matrix[y][x]);
+				std::random_shuffle(values.begin(), values.end());
+				for (byte i = 0; i < values.size(); i++)
+				{
+					if (snapToNull)
+						inputDelay = 0;
+					int valueX = std::get<0>(values[i]).x - X;
+					int valueY = std::get<0>(values[i]).y - Y;
+					for (int i = 0; i < std::abs(valueX); i++)
+						PressKey((valueX < 0 ? true : false) ? VK_LEFT : VK_RIGHT);
+					for (int i = 0; i < std::abs(valueY); i++)
+						PressKey((valueY < 0 ? true : false) ? VK_UP : VK_DOWN);
+					if (snapToNull)
+						inputDelay = tempInputDelay;
+
+					PressKey(0x30 + std::get<1>(values[i]));
+
+					X = std::get<0>(values[i]).x;
+					Y = std::get<0>(values[i]).y;
+				}
+				break;
+			case SuperHumanize:
+				//Do every 3x3 first
+				break;
+		}
 	}
 #pragma endregion
 #pragma endregion
@@ -411,10 +517,7 @@ private:
 		return 0;
 	}
 #pragma endregion
-#pragma region GetGame
-	POINT rightClick{};
-	POINT leftClick{};
-
+#pragma region Get Game
 	//Get "Copy Points"
 	void GetGameCopyPos()
 	{
@@ -431,7 +534,7 @@ private:
 		//Copy Game
 		SetCursorPos(rightClick.x, rightClick.y);
 		PressMouse(VK_RBUTTON, 0);
-		Sleep(50);
+		Sleep(clickCopyTime);
 		SetCursorPos(leftClick.x, leftClick.y);
 		PressMouse(VK_LBUTTON, 0);
 
@@ -455,7 +558,6 @@ private:
 						tempGame.push_back(IsGameColor(GetPixel(hdc, x, y)) > 0);
 				game.push_back(tempGame);
 			}
-
 
 		//Remove lines
 		std::vector<std::vector<bool>> tempGame;
@@ -510,14 +612,122 @@ private:
 		return NumberCode;
 	}
 #pragma endregion
+private: //Objects
+#pragma region Get Game
+	POINT rightClick{};
+	POINT leftClick{};
+	POINT difficulty{};
+#pragma endregion
+#pragma region Solving
+#pragma region Actual Sudoku Solver
+	std::vector<std::vector<int>> originalGrid;
+	std::vector<std::vector<int>> grid;
+	std::vector<std::unordered_set<int>> rows;
+	std::vector<std::unordered_set<int>> cols;
+	std::vector<std::unordered_set<int>> boxes;
+	bool solutionFound = false;
+#pragma endregion
+#pragma endregion
+#pragma region Calibrating
+	std::vector<std::vector<std::vector<std::tuple<std::string, int>>>> MatchCodes;
+#pragma endregion
 };
 
 int main()
 {
 	//To stop the code press 's'
-	SudokuGameAutoSolver gameSolver;
+	SudokuAutoGameSolver gameSolver;
 	gameSolver.readSudokuSpeed = 9;
 	gameSolver.inputDelay = 0;
-	gameSolver.showScore = 2000;
+	gameSolver.calibrationSpeed = 1;
+	gameSolver.showScore = 3000;
+	gameSolver.printWebsite = gameSolver.Print;
+	gameSolver.clickCopyTime = 100;
+	gameSolver.newGameWait = 1000;
+	//gameSolver.snapToNull = false; //Trying to make it work
 	gameSolver.ExecuteOrder66();
+
+	//Take time if needed :)
+	/*
+	auto start_time = std::chrono::high_resolution_clock::now();
+	auto end_time = std::chrono::high_resolution_clock::now();
+	std::cout << "Execution time: " << std::chrono::duration<double>(end_time - start_time).count() * 1000 << " milliseconds" << std::endl;
+	*/
 }
+
+
+//Using this setup, just with some small things changed. Feel free to use the code below or above as you like
+class SudokuSolver
+{
+public:
+	SudokuSolver(int bigSquareWidth, int smallSquareWidth)
+	{
+		rowColCount = bigSquareWidth;
+		smallRowColCount = smallSquareWidth;
+		for (int x = 0; x < rowColCount; x++)
+		{
+			boxes.push_back(std::unordered_set<int>());
+			rows.push_back(std::unordered_set<int>());
+			cols.push_back(std::unordered_set<int>());
+		}
+	}
+	void Solve(std::vector<std::vector<int>>& grid)
+	{
+		// Insert values into all unordered_set's
+		for (int y = 0; y < rowColCount; y++)
+			for (int x = 0; x < rowColCount; x++)
+				if (grid[y][x] != 0)
+				{
+					rows[y].insert(grid[y][x]);
+					cols[x].insert(grid[y][x]);
+					boxes[y / smallRowColCount * smallRowColCount + x / smallRowColCount].insert(grid[y][x]);
+				}
+
+		// Start solving
+		SolveRecursive(0, 0, grid);
+	}
+private:
+	int rowColCount;
+	int smallRowColCount;
+	std::vector<std::unordered_set<int>> rows;
+	std::vector<std::unordered_set<int>> cols;
+	std::vector<std::unordered_set<int>> boxes;
+	bool solutionFound = false;
+	bool Possible(int x, int y, int n)
+	{
+		return !rows[y].count(n) && !cols[x].count(n) && !boxes[y / smallRowColCount * 3 + x / smallRowColCount].count(n);
+	}
+	void SolveRecursive(int x, int y, std::vector<std::vector<int>>& grid)
+	{
+		if (y == rowColCount)
+		{
+			solutionFound = true;
+			return;
+		}
+
+		int nextX = (x + 1) % rowColCount;
+		int nextY = (nextX == 0) ? y + 1 : y;
+
+		if (grid[y][x] != 0)
+		{
+			SolveRecursive(nextX, nextY, grid);
+			return;
+		}
+		for (int n = 1; n <= rowColCount; n++)
+			if (Possible(x, y, n))
+			{
+				grid[y][x] = n;
+				rows[y].insert(n);
+				cols[x].insert(n);
+				boxes[y / smallRowColCount * 3 + x / smallRowColCount].insert(n);
+
+				SolveRecursive(nextX, nextY, grid);
+				if (solutionFound)
+					return;
+				grid[y][x] = 0;
+				rows[y].erase(n);
+				cols[x].erase(n);
+				boxes[y / smallRowColCount * 3 + x / smallRowColCount].erase(n);
+			}
+	}
+};
