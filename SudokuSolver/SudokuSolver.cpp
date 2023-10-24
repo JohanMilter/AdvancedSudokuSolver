@@ -3,10 +3,13 @@
 #include <thread>
 #include <cstdlib>
 #include <string>
-#include <algorithm>
-#include <unordered_set>
 #include <chrono>
+#include <algorithm>
+#include <vector>
+#include <array>
+#include <bitset>
 
+//Auto Solver
 class SudokuAutoGameSolver
 {
 public: //Methods
@@ -165,7 +168,7 @@ private: //Methods
 	}
 #pragma endregion
 #pragma region Solving
-	int LevenshteinDistance(const char* s1, const char* s2)
+	int LevenshteinDistance(const char* s1, const char* s2) const
 	{
 #define MIN(x,y) (x < y ? x : y) //calculate minimum between two values
 		int i, j, l1, l2, t, track;
@@ -191,12 +194,15 @@ private: //Methods
 	}
 	void SolveSudoku()
 	{
+		std::chrono::steady_clock::time_point start_time, end_time;
+
+		start_time = std::chrono::high_resolution_clock::now();
 		int i = 1;
 		auto numberCode = GetGameCodes();
-		std::vector<std::vector<int>> SudokuValues;
+		std::vector<std::vector<std::size_t>> SudokuValues;
 		for (int y = 0; y < MatchCodes.size(); y++)
 		{
-			std::vector<int> row;
+			std::vector<std::size_t> row;
 			for (int x = 0; x < MatchCodes[y].size(); x++)
 			{
 				if (numberCode[y][x] != "")
@@ -206,12 +212,12 @@ private: //Methods
 				}
 
 				float oldNum = 100;
-				int num = 0;
+				std::size_t num = 0;
 				for (std::tuple<std::string, int> item : MatchCodes[y][x])
 					if (numberCode[y][x] != "")
 					{
 						float testMatch = (double)LevenshteinDistance(std::get<0>(item).c_str(), numberCode[y][x].c_str()) / std::get<0>(item).size();
-
+						
 						std::cout << std::get<1>(item) << ": " << std::get<0>(item) << " and " << numberCode[y][x] << " = " << testMatch << std::endl;
 						if (testMatch < oldNum)
 						{
@@ -226,7 +232,9 @@ private: //Methods
 			}
 			SudokuValues.push_back(row);
 		}
+		end_time = std::chrono::high_resolution_clock::now();
 		std::cout << std::endl;
+		std::cout << "Got game in: " << std::chrono::duration<double>(end_time - start_time).count() * 1000 << " milliseconds:" << std::endl;
 		for (byte i_1 = 0; i_1 < SudokuValues.size(); i_1++)
 		{
 			if (i_1 % 3 == 0 && i_1 != 0)
@@ -238,82 +246,93 @@ private: //Methods
 					std::cout << " " << SudokuValues[i_1][i_2];
 			std::cout << std::endl;
 		}
-		Solve(SudokuValues);
 		std::cout << std::endl;
-		PrintSudoku(grid);
+
+		start_time = std::chrono::high_resolution_clock::now();
+		solveSudoku(SudokuValues);
+		end_time = std::chrono::high_resolution_clock::now();
+		std::cout << "Solved game in: " << std::chrono::duration<double>(end_time - start_time).count() * 1000 << " milliseconds:" << std::endl;
+
+		start_time = std::chrono::high_resolution_clock::now();
+		PrintSudoku(SudokuValues);
+		end_time = std::chrono::high_resolution_clock::now();
 		std::cout << std::endl;
+		std::cout << "Printed game in: " << std::chrono::duration<double>(end_time - start_time).count() * 1000 << " milliseconds" << std::endl;
+		std::cout << std::endl;
+
 	}
 #pragma region Actual Sudoku Solver
-	void Solve(std::vector<std::vector<int>> Grid)
+	void solveSudoku(std::vector<std::vector<std::size_t>>& board) const noexcept
 	{
-		grid = originalGrid = Grid;
-		boxes.clear();
-		rows.clear();
-		cols.clear();
-		solutionFound = false;
-		// Insert values into all unordered_set's
-		for (byte i = 0; i < 9; i++)
-		{
-			boxes.push_back(std::unordered_set<int>());
-			rows.push_back(std::unordered_set<int>());
-			cols.push_back(std::unordered_set<int>());
-		}
-		for (int y = 0; y < 9; y++)
-		{
-			for (int x = 0; x < 9; x++)
+		std::array<std::bitset<9>, 9> row_contains = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		std::array<std::bitset<9>, 9> col_contains = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		std::array<std::bitset<9>, 9> cell_contains = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+		for (std::size_t row = 0; row < 9; row++)
+			for (std::size_t col = 0; col < 9; col++)
 			{
-				if (grid[y][x] != 0)
+				std::size_t digit;
+				if ((digit = board[row][col]) != 0)
 				{
-					rows[y].insert(grid[y][x]);
-					cols[x].insert(grid[y][x]);
-					boxes[y / 3 * 3 + x / 3].insert(grid[y][x]);
+					std::size_t digit_idx = digit - 1;
+					row_contains[row].set(digit_idx);
+					col_contains[col].set(digit_idx);
+					std::size_t cell = (row / 3) * 3 + col / 3;
+					cell_contains[cell].set(digit_idx);
 				}
 			}
-		}
-
-		// Start solving
-		SolveRecursive(0, 0);
+		solve(board, 0, 0, row_contains, col_contains, cell_contains);
 	}
-	bool Possible(int x, int y, int n)
+	static constexpr std::pair<std::size_t, std::size_t>
+		next_empty_position(std::vector<std::vector<std::size_t>>& board, std::size_t row, std::size_t col) noexcept
 	{
-		return !rows[y].count(n) && !cols[x].count(n) && !boxes[y / 3 * 3 + x / 3].count(n);
+		while (row != 9)
+		{
+			if (board[row][col] == 0)
+				return { row, col };
+			row = row + (col + 1) / 9;
+			col = (col + 1) % 9;
+		}
+		return { 9, 0 };
 	}
-	void SolveRecursive(int x, int y)
+
+	static bool
+		solve(std::vector<std::vector<std::size_t>>& board, std::size_t const row_start, std::size_t const col_start,
+			  std::array<std::bitset<9>, 9>& row_contains,
+			  std::array<std::bitset<9>, 9>& col_contains,
+			  std::array<std::bitset<9>, 9>& cell_contains) noexcept
 	{
-		if (y == 9)
-		{
-			solutionFound = true;
-			return;
-		}
 
-		int nextX = (x + 1) % 9;
-		int nextY = (nextX == 0) ? y + 1 : y;
+		std::pair<size_t, size_t> rowCol = next_empty_position(board, row_start, col_start);
 
-		if (grid[y][x] != 0)
-		{
-			SolveRecursive(nextX, nextY);
-			return;
-		}
-		for (int n = 1; n <= 9; n++)
-		{
-			if (Possible(x, y, n))
+		if (rowCol.first == 9) // end of board
+			return true;
+
+		std::size_t const cell = (rowCol.first / 3) * 3 + rowCol.second / 3;
+		std::bitset<9> const contains = row_contains[rowCol.first] | col_contains[rowCol.second] | cell_contains[cell];
+		if (contains.all())
+			return false;
+
+		for (std::size_t digit_idx = 0; digit_idx < 9; ++digit_idx)
+			if (!contains[digit_idx])
 			{
-				grid[y][x] = n;
-				rows[y].insert(n);
-				cols[x].insert(n);
-				boxes[y / 3 * 3 + x / 3].insert(n);
+				board[rowCol.first][rowCol.second] = digit_idx + 1;
+				row_contains[rowCol.first].set(digit_idx);
+				col_contains[rowCol.second].set(digit_idx);
+				cell_contains[cell].set(digit_idx);
+				if (solve(board, rowCol.first, rowCol.second, row_contains, col_contains, cell_contains))
+					return true;
 
-				SolveRecursive(nextX, nextY);
-				if (solutionFound)
-					return;
-				grid[y][x] = 0;
-				rows[y].erase(n);
-				cols[x].erase(n);
-				boxes[y / 3 * 3 + x / 3].erase(n);
+				row_contains[rowCol.first].reset(digit_idx);
+				col_contains[rowCol.second].reset(digit_idx);
+				cell_contains[cell].reset(digit_idx);
 			}
-		}
+		board[rowCol.first][rowCol.second] = 0;
+		return false;
 	}
-	void PrintSudoku(std::vector<std::vector<int>> matrix)
+#pragma endregion
+#pragma region Printing sudoku
+	void PrintSudoku(std::vector<std::vector<std::size_t>> matrix)
 	{
 		for (byte i_1 = 0; i_1 < matrix.size(); i_1++)
 		{
@@ -330,7 +349,7 @@ private: //Methods
 		int tempInputDelay = inputDelay;
 		int X = 0;
 		int Y = 0;
-		std::vector<std::tuple<POINT, int>> values;
+		std::vector<std::tuple<POINT, std::size_t>> values;
 		switch (printWebsite)
 		{
 			case Print:
@@ -481,7 +500,7 @@ private: //Methods
 	}
 #pragma endregion
 #pragma region Converters
-	HDC ConvertHandleToHDC(HANDLE hHandle)
+	static HDC ConvertHandleToHDC(HANDLE hHandle)
 	{
 		HDC hDC = NULL;
 
@@ -494,7 +513,7 @@ private: //Methods
 
 		return hDC;
 	}
-	HBITMAP ConvertHandleToHBitmap(HANDLE hHandle)
+	static HBITMAP ConvertHandleToHBitmap(HANDLE hHandle)
 	{
 		HBITMAP hBitmap = NULL;
 
@@ -505,14 +524,14 @@ private: //Methods
 	}
 #pragma endregion
 #pragma region Value Checkers
-	int IsGameColor(COLORREF color)
+	static int IsGameColor(COLORREF color)
 	{
 		int red = GetRValue(color);
 		int green = GetGValue(color);
 		int blue = GetBValue(color);
 		if (red == 52 && green == 72 && blue == 97)
 			return 1;
-		if (red == 229 && green == 92 && blue == 108)
+		else if (red == 229 && green == 92 && blue == 108)
 			return 2;
 		return 0;
 	}
@@ -559,7 +578,7 @@ private: //Methods
 				game.push_back(tempGame);
 			}
 
-		//Remove lines
+		//Remove lines - I failed so fucking much with this one
 		std::vector<std::vector<bool>> tempGame;
 		int removedX = 0;
 		for (int y = 0; y < game.size(); y++)
@@ -619,19 +638,92 @@ private: //Objects
 	POINT difficulty{};
 #pragma endregion
 #pragma region Solving
-#pragma region Actual Sudoku Solver
+#pragma region Printing sudoku
 	std::vector<std::vector<int>> originalGrid;
-	std::vector<std::vector<int>> grid;
-	std::vector<std::unordered_set<int>> rows;
-	std::vector<std::unordered_set<int>> cols;
-	std::vector<std::unordered_set<int>> boxes;
-	bool solutionFound = false;
 #pragma endregion
 #pragma endregion
 #pragma region Calibrating
 	std::vector<std::vector<std::vector<std::tuple<std::string, int>>>> MatchCodes;
 #pragma endregion
 };
+
+//Main sudoku solver engine
+class SudokuSolver
+{
+public:
+	void solveSudoku(std::vector<std::vector<std::size_t>>& board) const noexcept
+	{
+		std::array<std::bitset<9>, 9> row_contains = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		std::array<std::bitset<9>, 9> col_contains = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		std::array<std::bitset<9>, 9> cell_contains = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+		for (std::size_t row = 0; row < 9; row++)
+			for (std::size_t col = 0; col < 9; col++)
+			{
+				std::size_t digit;
+				if ((digit = board[row][col]) != 0)
+				{
+					std::size_t digit_idx = digit - 1;
+					row_contains[row].set(digit_idx);
+					col_contains[col].set(digit_idx);
+					std::size_t cell = (row / 3) * 3 + col / 3;
+					cell_contains[cell].set(digit_idx);
+				}
+			}
+		solve(board, 0, 0, row_contains, col_contains, cell_contains);
+	}
+
+private:
+	static constexpr 
+		std::pair<std::size_t, std::size_t>next_empty_position(std::vector<std::vector<std::size_t>>& board, std::size_t row, std::size_t col) noexcept
+	{
+		while (row != 9)
+		{
+			if (board[row][col] == 0)
+				return { row, col };
+			row = row + (col + 1) / 9;
+			col = (col + 1) % 9;
+		}
+		return { 9, 0 };
+	}
+
+	static bool
+		solve(std::vector<std::vector<std::size_t>>& board, std::size_t const row_start, std::size_t const col_start,
+			  std::array<std::bitset<9>, 9>& row_contains,
+			  std::array<std::bitset<9>, 9>& col_contains,
+			  std::array<std::bitset<9>, 9>& cell_contains) noexcept
+	{
+		
+		std::pair<size_t, size_t> rowCol = next_empty_position(board, row_start, col_start);
+
+		if (rowCol.first == 9) // end of board
+			return true;
+
+		std::size_t const cell = (rowCol.first / 3) * 3 + rowCol.second / 3;
+		std::bitset<9> const contains = row_contains[rowCol.first] | col_contains[rowCol.second] | cell_contains[cell];
+		if (contains.all())
+			return false;
+
+		for (std::size_t digit_idx = 0; digit_idx < 9; ++digit_idx)
+			if (!contains[digit_idx])
+			{
+				board[rowCol.first][rowCol.second] = digit_idx + 1;
+				row_contains[rowCol.first].set(digit_idx);
+				col_contains[rowCol.second].set(digit_idx);
+				cell_contains[cell].set(digit_idx);
+
+				if (solve(board, rowCol.first, rowCol.second, row_contains, col_contains, cell_contains))
+					return true;
+
+				row_contains[rowCol.first].reset(digit_idx);
+				col_contains[rowCol.second].reset(digit_idx);
+				cell_contains[cell].reset(digit_idx);
+			}
+		board[rowCol.first][rowCol.second] = 0;
+		return false;
+	}
+};
+
 
 int main()
 {
@@ -640,94 +732,21 @@ int main()
 	gameSolver.readSudokuSpeed = 9;
 	gameSolver.inputDelay = 0;
 	gameSolver.calibrationSpeed = 1;
-	gameSolver.showScore = 3000;
+	gameSolver.showScore = 2000;
 	gameSolver.printWebsite = gameSolver.Print;
 	gameSolver.clickCopyTime = 100;
 	gameSolver.newGameWait = 1000;
 	//gameSolver.snapToNull = false; //Trying to make it work
 	gameSolver.ExecuteOrder66();
 
+
+	
 	//Take time if needed :)
 	/*
 	auto start_time = std::chrono::high_resolution_clock::now();
 	auto end_time = std::chrono::high_resolution_clock::now();
 	std::cout << "Execution time: " << std::chrono::duration<double>(end_time - start_time).count() * 1000 << " milliseconds" << std::endl;
 	*/
+
 }
 
-
-//Using this setup, just with some small things changed. Feel free to use the code below or above as you like
-class SudokuSolver
-{
-public:
-	SudokuSolver(int bigSquareWidth, int smallSquareWidth)
-	{
-		rowColCount = bigSquareWidth;
-		smallRowColCount = smallSquareWidth;
-		for (int x = 0; x < rowColCount; x++)
-		{
-			boxes.push_back(std::unordered_set<int>());
-			rows.push_back(std::unordered_set<int>());
-			cols.push_back(std::unordered_set<int>());
-		}
-	}
-	void Solve(std::vector<std::vector<int>>& grid)
-	{
-		// Insert values into all unordered_set's
-		for (int y = 0; y < rowColCount; y++)
-			for (int x = 0; x < rowColCount; x++)
-				if (grid[y][x] != 0)
-				{
-					rows[y].insert(grid[y][x]);
-					cols[x].insert(grid[y][x]);
-					boxes[y / smallRowColCount * smallRowColCount + x / smallRowColCount].insert(grid[y][x]);
-				}
-
-		// Start solving
-		SolveRecursive(0, 0, grid);
-	}
-private:
-	int rowColCount;
-	int smallRowColCount;
-	std::vector<std::unordered_set<int>> rows;
-	std::vector<std::unordered_set<int>> cols;
-	std::vector<std::unordered_set<int>> boxes;
-	bool solutionFound = false;
-	bool Possible(int x, int y, int n)
-	{
-		return !rows[y].count(n) && !cols[x].count(n) && !boxes[y / smallRowColCount * 3 + x / smallRowColCount].count(n);
-	}
-	void SolveRecursive(int x, int y, std::vector<std::vector<int>>& grid)
-	{
-		if (y == rowColCount)
-		{
-			solutionFound = true;
-			return;
-		}
-
-		int nextX = (x + 1) % rowColCount;
-		int nextY = (nextX == 0) ? y + 1 : y;
-
-		if (grid[y][x] != 0)
-		{
-			SolveRecursive(nextX, nextY, grid);
-			return;
-		}
-		for (int n = 1; n <= rowColCount; n++)
-			if (Possible(x, y, n))
-			{
-				grid[y][x] = n;
-				rows[y].insert(n);
-				cols[x].insert(n);
-				boxes[y / smallRowColCount * 3 + x / smallRowColCount].insert(n);
-
-				SolveRecursive(nextX, nextY, grid);
-				if (solutionFound)
-					return;
-				grid[y][x] = 0;
-				rows[y].erase(n);
-				cols[x].erase(n);
-				boxes[y / smallRowColCount * 3 + x / smallRowColCount].erase(n);
-			}
-	}
-};
